@@ -1,0 +1,109 @@
+#!/usr/bin/env perl
+
+use 5.010;
+
+use strict;
+use warnings;
+
+use Getopt::Long 2.33 qw{ :config auto_version };
+use Pod::Usage;
+use POSIX qw{ strftime };
+
+our $VERSION = '0.000_001';
+
+my %opt = (
+    format	=> '%Y-%m-%d %H:%M:%S',
+);
+
+GetOptions( \%opt,
+    qw{ set! tz=s },
+    help => sub { pod2usage( { -verbose => 2 } ) },
+) or pod2usage( { -verbose => 0 } );
+
+
+defined $opt{tz}
+    and local $ENV{TZ} = $opt{tz};
+
+if ( $opt{set} && defined $opt{tz} ) {
+    state $bad_os = { map { $_ => 1 } qw{ cygwin interix MSWin32 VMS }
+    };
+    if ( $bad_os->{$^O} ) {
+	warn "POSIX::tzset() does not work under $^O\n";
+    } else {
+	tzset();
+    }
+}
+
+say strftime $opt->{format}, @ARGV;
+
+__END__
+
+=head1 TITLE
+
+strftime-try - Feed hand-made data into strftime()
+
+=head1 SYNOPSIS
+
+ strftime-try -- 0 30 23 1 4 114 -1 -1 0
+ strftime-try --help
+ strftime-try --version
+
+=head1 OPTIONS
+
+=head2 --format
+
+ --format='%a %b %d %H:%M:%S %Y'
+
+This option specifies the format for C<strftime()> to use. The default
+is C<--format=%Y-%m-%d %H:%M:%S'>.
+
+=head2 --help
+
+This option displays the documentation for this script. The script then
+exits.
+
+=head2 --set
+
+If this Boolean option is asserted B<and> L<--tz|/--tz> was specified,
+C<POSIX::tzset()> will be called after C<$ENV{TZ}> is set. Otherwise,
+C<POSIX::tzset()> is not called.
+
+The default is C<--no-set>.
+
+=head2 --tz
+
+ --tz=UTC
+
+If this option is specified, C<$ENV{TZ}> is localized and set to its
+value before calling C<strftime()>.
+
+=head2 --version
+
+This option displays the version of this script. The script then exits.
+
+=head1 DETAILS
+
+This Perl script simply passes its command line arguments to
+C<POSIX::strftime()> and prints the result.
+
+=head1 AUTHOR
+
+Thomas R. Wyant, III F<wyant at cpan dot org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (C) 2024 by Thomas R. Wyant, III
+
+This program is free software; you can redistribute it and/or modify it
+under the same terms as Perl 5.10.0. For more details, see the Artistic
+License 1.0 at
+L<https://www.perlfoundation.org/artistic-license-10.html>, and/or the
+Gnu GPL at L<http://www.gnu.org/licenses/old-licenses/gpl-1.0.txt>.
+
+This program is distributed in the hope that it will be useful, but
+without any warranty; without even the implied warranty of
+merchantability or fitness for a particular purpose.
+
+=cut
+
+# ex: set textwidth=72 :

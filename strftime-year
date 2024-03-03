@@ -1,0 +1,200 @@
+#!/usr/bin/env perl
+
+use 5.010;
+
+use strict;
+use warnings;
+
+use Getopt::Long 2.33 qw{ :config auto_version };
+use Pod::Usage;
+use POSIX qw{ strftime tzset };
+use Time::Local 1.30 qw{ timegm_posix };
+
+our $VERSION = '0.000_001';
+
+my %opt = (
+    isdst	=> 1,
+);
+
+GetOptions( \%opt,
+    qw{ isdst|is-dst|is_dst! set! tz=s verbose! },
+    help => sub { pod2usage( { -verbose => 2 } ) },
+) or pod2usage( { -verbose => 0 } );
+
+defined $opt{tz}
+    and local $ENV{TZ} = $opt{tz};
+
+if ( $opt{set} && defined $opt{tz} ) {
+    state $bad_os = { map { $_ => 1 } qw{ cygwin interix MSWin32 VMS }
+    };
+    if ( $bad_os->{$^O} ) {
+	warn "POSIX::tzset() does not work under $^O\n";
+    } else {
+	tzset();
+    }
+}
+
+my $year = ( @ARGV ? $ARGV[0] : 2024 );
+
+my $epoch     = timegm_posix( 0, 0, 0, 1, 0, $year - 1900 );
+my $end_epoch = timegm_posix( 0, 0, 0, 1, 0, $year - 1900 + 1 );
+
+my $agree = 1;	# Assume agreement
+
+while ( $epoch < $end_epoch ) {
+    my @time = gmtime( $epoch );
+    $opt{isdst}
+	or pop @time;
+    my $want = sprintf '%04d-%02d-%02d %02d:%02d:%02d', $time[5] + 1900,
+	$time[4] + 1, $time[3], $time[2], $time[1], $time[0];
+    my $got = strftime '%Y-%m-%d %H:%M:%S', @time;
+    my $same = $got eq $want ? 1 : 0;
+    if ( $opt{verbose} || ! defined ( $agree ) || $same != $agree ) {
+	say "got: $got; want: $want";
+	$agree = $same;
+    }
+    $epoch += 30 * 60;	# 30 minutes
+}
+
+
+__END__
+
+=head1 TITLE
+
+strftime-year - Compare strftime() output to hand-formatted date for every hour of a specified year.
+
+=head1 SYNOPSIS
+
+ strftime-year 2000
+ strftime-year --help
+ strftime-year --version
+
+=head1 OPTIONS
+
+=head2 --help
+
+This option displays the documentation for this script. The script then
+exits.
+
+=head2 --is-dst
+
+If this Boolean option is asserted, the output of C<gmtime()> is passed
+to C<strftime()> unmodified. If it is negated, the last element
+(C<isdst>) is removed before passing it to C<strftime()>.
+
+This option is asserted by default, but can be negated by
+C<--no-is-dst>.
+
+=head2 --set
+
+If this Boolean option is asserted B<and> L<--tz|/--tz> was specified,
+C<POSIX::tzset()> will be called after C<$ENV{TZ}> is set. Otherwise,
+C<POSIX::tzset()> is not called.
+
+The default is C<--no-set>.
+
+=head2 --tz
+
+ --tz=UTC
+
+If this option is specified, C<$ENV{TZ}> is localized and set to its
+value before calling C<strftime()>.
+
+=head2 --verbose
+
+If this Boolean option is asserted, all times checked will appear in the
+output; Otherwise only the initial time, plus those time where the
+agreement between hand-formatted and C<POSIX::strftime()>-foratted time
+changes will be output.
+
+The default is C<--no-verbose>.
+
+=head2 --version
+
+This option displays the version of this script. The script then exits.
+
+=head1 DETAILS
+
+This Perl script formats the time for every thirty minutes in a given
+year specified on the command line (the default being 2024).
+
+The beginning epoch of the year is computed by
+
+ my $epoch = timegm_posix( 0, 0, 0, 1, 0, $year - 1900 );
+
+and that epoch is incremented by 30 minutes (i.e. C<30 * 60> seconds)
+until the beginning of the next year is reached. The C<gmtime()>
+built-in is called to populate C<@time>, and the results are formatted
+using both
+
+ strftime '%Y-%m-%d %H:%M:%S', @time
+
+and
+
+ sprintf '%04d-%02d-%02d %02d:%02d:%02d', $time[5] + 1900,
+    $time[4] + 1, $time[3], $time[2], $time[1], $time[0];
+
+
+By default, a line of output is generated every time where the results
+of the two formatting methods transition from being the same to being
+different, or vice versa. The results of C<strftime()> are displayed as
+C<'got:'>, and the results of C<sprintf()> as C<'want:'>.
+
+=head1 EXECUTION ENVIRONMENT
+
+This script has been run under both macOS 13.6.3 Ventura and Raspbian
+(or whatever they call it now) Linux 6.1.21-v8+. Both systems' Olson
+zone was America/New_York, and the C<$TZ> environment variable was not
+set.
+
+=head1 OBSERVATIONS
+
+I found all the following observations to be valid both under macOS and
+Raspbian Linux.
+
+=head2 Under Perl 5.39.8
+
+When run under Perl 5.39.8, this script finds that the C<strftime()>
+output differs by an hour from the C<sprintf()> output while summer time
+is in effect B<in my zone>.
+
+If C<--no-is-dst> is specified, the C<strftime()> output differs by an
+hour from the C<sprintf()> output only during the transition from
+standard time to summer time in my zone.
+
+If C<--tz=UTC0UTC> (the value used in F<ext/POSIX/t/strftime.t>) the
+result is the same as if no options were specified.
+
+If C<--tz=UTC> is specifed, this script finds no differences at all
+between the C<strftime()> output and the C<sprintf()> output. This also
+happens with C<--tz=GMT> and C<--tz=UTC0>.
+
+Specifying L<--set|/--set> to get C<POSIX::tzset()> called appears to
+have no effect on the above results.
+
+=head2 Under any other Perl I have tried
+
+No differences between C<strftime()> output and C<sprintf()> output were
+observed under any of the above conditions.
+
+=head1 AUTHOR
+
+Thomas R. Wyant, III F<wyant at cpan dot org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (C) 2024 by Thomas R. Wyant, III
+
+This program is free software; you can redistribute it and/or modify it
+under the same terms as Perl 5.10.0. For more details, see the Artistic
+License 1.0 at
+L<https://www.perlfoundation.org/artistic-license-10.html>, and/or the
+Gnu GPL at L<http://www.gnu.org/licenses/old-licenses/gpl-1.0.txt>.
+
+This program is distributed in the hope that it will be useful, but
+without any warranty; without even the implied warranty of
+merchantability or fitness for a particular purpose.
+
+=cut
+
+# ex: set textwidth=72 :
