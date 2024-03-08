@@ -34,7 +34,7 @@ if ( $opt{set} && defined $opt{tz} ) {
     }
 }
 
-say strftime $opt->{format}, @ARGV;
+say strftime $opt{format}, @ARGV;
 
 __END__
 
